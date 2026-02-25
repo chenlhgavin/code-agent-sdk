@@ -1,7 +1,7 @@
 //! Subprocess transport using Claude Code CLI.
 
 use crate::error::{Error, Result};
-use crate::options::ClaudeAgentOptions;
+use crate::options::AgentOptions;
 use crate::transport::Transport;
 use async_stream::stream;
 use std::path::Path;
@@ -14,7 +14,7 @@ const DEFAULT_MAX_BUFFER_SIZE: usize = 1024 * 1024; // 1MB
 const MINIMUM_CLAUDE_CODE_VERSION: &str = "2.0.0";
 
 pub struct SubprocessCliTransport {
-    options: ClaudeAgentOptions,
+    options: AgentOptions,
     cli_path: String,
     cwd: Option<String>,
     process: Option<Child>,
@@ -26,7 +26,7 @@ pub struct SubprocessCliTransport {
 }
 
 impl SubprocessCliTransport {
-    pub fn new(_prompt: &str, options: ClaudeAgentOptions) -> Result<Self> {
+    pub fn new(_prompt: &str, options: AgentOptions) -> Result<Self> {
         let cli_path = Self::find_cli(&options)?;
         let cwd = options
             .cwd
@@ -48,7 +48,7 @@ impl SubprocessCliTransport {
         })
     }
 
-    fn find_cli(options: &ClaudeAgentOptions) -> Result<String> {
+    fn find_cli(options: &AgentOptions) -> Result<String> {
         if let Some(ref p) = options.cli_path {
             return Ok(p.to_string_lossy().to_string());
         }
@@ -79,7 +79,7 @@ impl SubprocessCliTransport {
 
         Err(Error::CliNotFound(
             "Claude Code not found. Install with:\n  npm install -g @anthropic-ai/claude-code\n\n\
-             Or provide the path via ClaudeAgentOptions::cli_path()"
+             Or provide the path via AgentOptions::cli_path()"
                 .to_string(),
         ))
     }
@@ -322,15 +322,13 @@ impl SubprocessCliTransport {
             cmd.push("--effort".to_string());
             cmd.push(e.to_string());
         }
-        if let Some(ref of) = self.options.output_format {
-            if let Some(obj) = of.as_object() {
-                if obj.get("type").and_then(|v| v.as_str()) == Some("json_schema") {
-                    if let Some(schema) = obj.get("schema") {
-                        cmd.push("--json-schema".to_string());
-                        cmd.push(schema.to_string());
-                    }
-                }
-            }
+        if let Some(ref of_val) = self.options.output_format
+            && let Some(obj) = of_val.as_object()
+            && obj.get("type").and_then(|v| v.as_str()) == Some("json_schema")
+            && let Some(schema) = obj.get("schema")
+        {
+            cmd.push("--json-schema".to_string());
+            cmd.push(schema.to_string());
         }
         if let Some(ref p) = self.options.permission_prompt_tool_name {
             cmd.push("--permission-prompt-tool".to_string());
@@ -362,24 +360,23 @@ impl SubprocessCliTransport {
             let s = s.trim();
             if s.starts_with('{') && s.ends_with('}') {
                 // Try to parse as JSON string
-                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s) {
-                    if let Some(obj) = parsed.as_object() {
-                        for (k, v) in obj {
-                            settings_obj.insert(k.clone(), v.clone());
-                        }
+                if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(s)
+                    && let Some(obj) = parsed.as_object()
+                {
+                    for (k, v) in obj {
+                        settings_obj.insert(k.clone(), v.clone());
                     }
                 }
             } else {
                 // It's a file path - read and parse
                 let settings_path = std::path::Path::new(s);
                 if settings_path.exists() {
-                    if let Ok(content) = std::fs::read_to_string(settings_path) {
-                        if let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) {
-                            if let Some(obj) = parsed.as_object() {
-                                for (k, v) in obj {
-                                    settings_obj.insert(k.clone(), v.clone());
-                                }
-                            }
+                    if let Ok(content) = std::fs::read_to_string(settings_path)
+                        && let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content)
+                        && let Some(obj) = parsed.as_object()
+                    {
+                        for (k, v) in obj {
+                            settings_obj.insert(k.clone(), v.clone());
                         }
                     }
                 } else {
@@ -537,10 +534,10 @@ impl Transport for SubprocessCliTransport {
         }
 
         let mut process = child_cmd.spawn().map_err(|e| {
-            if let Some(ref cwd) = self.cwd {
-                if !Path::new(cwd).exists() {
-                    return Error::Other(format!("Working directory does not exist: {}", cwd));
-                }
+            if let Some(ref cwd) = self.cwd
+                && !Path::new(cwd).exists()
+            {
+                return Error::Other(format!("Working directory does not exist: {}", cwd));
             }
             Error::CliNotFound(format!(
                 "Claude Code not found at: {} - {}",
@@ -551,23 +548,21 @@ impl Transport for SubprocessCliTransport {
         self.stdin = process.stdin.take();
         self.stdout = process.stdout.take();
 
-        if should_pipe_stderr {
-            if let Some(stderr) = process.stderr.take() {
-                let stderr_callback = self.options.stderr.clone();
-                let stderr_reader = BufReader::new(stderr);
-                // Spawn task to read stderr and invoke callback
-                tokio::spawn(async move {
-                    let mut lines = stderr_reader.lines();
-                    while let Ok(Some(line)) = lines.next_line().await {
-                        let line_str = line.trim_end();
-                        if !line_str.is_empty() {
-                            if let Some(ref cb) = stderr_callback {
-                                cb(line_str);
-                            }
-                        }
+        if should_pipe_stderr && let Some(stderr) = process.stderr.take() {
+            let stderr_callback = self.options.stderr.clone();
+            let stderr_reader = BufReader::new(stderr);
+            // Spawn task to read stderr and invoke callback
+            tokio::spawn(async move {
+                let mut lines = stderr_reader.lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let line_str = line.trim_end();
+                    if !line_str.is_empty()
+                        && let Some(ref cb) = stderr_callback
+                    {
+                        cb(line_str);
                     }
-                });
-            }
+                }
+            });
         }
 
         self.process = Some(process);

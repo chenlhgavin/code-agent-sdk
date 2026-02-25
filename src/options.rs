@@ -1,9 +1,16 @@
-//! ClaudeAgentOptions and builder.
+//! Agent options and builder.
+//!
+//! Agent options and builder for all backends.
+//!
+//! [`AgentOptions`] configures all backends. Backend-specific options are in
+//! [`CodexOptions`] and [`CursorOptions`].
 
 use std::collections::HashMap;
 use std::fmt;
 use std::path::PathBuf;
 use std::sync::Arc;
+
+use crate::backend::BackendKind;
 
 /// Permission modes for tool execution control.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
@@ -302,8 +309,35 @@ impl From<String> for AssistantMessageError {
     }
 }
 
+/// Codex-specific options.
+#[derive(Debug, Clone, Default)]
+pub struct CodexOptions {
+    /// Approval policy: `"auto-edit"`, `"full-auto"`, or `"suggest"`.
+    pub approval_policy: Option<String>,
+    /// Sandbox mode: `"read-only"`, `"workspace-write"`, or `"danger-full-access"`.
+    pub sandbox_mode: Option<String>,
+}
+
+/// Cursor Agent-specific options.
+#[derive(Debug, Clone, Default)]
+pub struct CursorOptions {
+    /// Force-approve all tool calls (`--force` / `--yolo`).
+    pub force_approve: bool,
+    /// Execution mode: `"plan"` or `"ask"`.
+    pub mode: Option<String>,
+    /// Trust the current workspace without prompting (`--trust`).
+    pub trust_workspace: bool,
+}
+
+/// Agent options for all backends.
+///
+/// This is the primary configuration struct. Use [`BackendKind`] to select
+/// the target CLI backend. Options not applicable to the selected backend
+/// are validated at runtime and produce [`Error::UnsupportedOptions`](crate::error::Error::UnsupportedOptions).
 #[derive(Clone, Default)]
-pub struct ClaudeAgentOptions {
+pub struct AgentOptions {
+    /// Which backend to use. Defaults to [`BackendKind::Claude`].
+    pub backend: Option<BackendKind>,
     pub tools: Option<ToolsConfig>,
     pub allowed_tools: Vec<String>,
     pub disallowed_tools: Vec<String>,
@@ -340,11 +374,16 @@ pub struct ClaudeAgentOptions {
     pub can_use_tool: Option<CanUseToolCallback>,
     pub hooks: Option<HashMap<HookEvent, Vec<HookMatcher>>>,
     pub stderr: Option<StderrCallback>,
+    /// Codex-specific options.
+    pub codex: Option<CodexOptions>,
+    /// Cursor Agent-specific options.
+    pub cursor: Option<CursorOptions>,
 }
 
-impl std::fmt::Debug for ClaudeAgentOptions {
+impl std::fmt::Debug for AgentOptions {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("ClaudeAgentOptions")
+        f.debug_struct("AgentOptions")
+            .field("backend", &self.backend)
             .field("tools", &self.tools)
             .field("allowed_tools", &self.allowed_tools)
             .field("system_prompt", &self.system_prompt)
@@ -695,15 +734,22 @@ pub enum SystemPromptConfig {
     },
 }
 
-pub struct ClaudeAgentOptionsBuilder {
-    options: ClaudeAgentOptions,
+/// Builder for [`AgentOptions`].
+pub struct AgentOptionsBuilder {
+    options: AgentOptions,
 }
 
-impl ClaudeAgentOptionsBuilder {
+impl AgentOptionsBuilder {
     pub fn new() -> Self {
         Self {
-            options: ClaudeAgentOptions::default(),
+            options: AgentOptions::default(),
         }
+    }
+
+    /// Select the backend CLI to use.
+    pub fn backend(mut self, kind: BackendKind) -> Self {
+        self.options.backend = Some(kind);
+        self
     }
 
     pub fn allowed_tools(mut self, tools: impl IntoIterator<Item = impl Into<String>>) -> Self {
@@ -761,12 +807,12 @@ impl ClaudeAgentOptionsBuilder {
         self
     }
 
-    pub fn build(self) -> ClaudeAgentOptions {
+    pub fn build(self) -> AgentOptions {
         self.options
     }
 }
 
-impl ClaudeAgentOptionsBuilder {
+impl AgentOptionsBuilder {
     pub fn betas(mut self, betas: impl IntoIterator<Item = impl Into<SdkBeta>>) -> Self {
         self.options.betas = betas.into_iter().map(Into::into).collect();
         self
@@ -859,16 +905,49 @@ impl ClaudeAgentOptionsBuilder {
         self.options.enable_file_checkpointing = enable;
         self
     }
+
+    /// Set Codex-specific options.
+    pub fn codex(mut self, codex_opts: CodexOptions) -> Self {
+        self.options.codex = Some(codex_opts);
+        self
+    }
+
+    /// Set Cursor Agent-specific options.
+    pub fn cursor(mut self, cursor_opts: CursorOptions) -> Self {
+        self.options.cursor = Some(cursor_opts);
+        self
+    }
+
+    pub fn setting_sources(mut self, sources: impl IntoIterator<Item = SettingSource>) -> Self {
+        self.options.setting_sources = Some(sources.into_iter().collect());
+        self
+    }
+
+    pub fn output_format(mut self, format: serde_json::Value) -> Self {
+        self.options.output_format = Some(format);
+        self
+    }
+
+    pub fn fallback_model(mut self, model: impl Into<String>) -> Self {
+        self.options.fallback_model = Some(model.into());
+        self
+    }
+
+    pub fn effort(mut self, effort: Effort) -> Self {
+        self.options.effort = Some(effort);
+        self
+    }
 }
 
-impl Default for ClaudeAgentOptionsBuilder {
+impl Default for AgentOptionsBuilder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl ClaudeAgentOptions {
-    pub fn builder() -> ClaudeAgentOptionsBuilder {
-        ClaudeAgentOptionsBuilder::new()
+impl AgentOptions {
+    /// Create a builder for [`AgentOptions`].
+    pub fn builder() -> AgentOptionsBuilder {
+        AgentOptionsBuilder::new()
     }
 }

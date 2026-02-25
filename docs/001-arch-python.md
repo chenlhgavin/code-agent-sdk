@@ -441,4 +441,4 @@ src/claude_agent_sdk/
 
 ## 8. 与 Rust SDK 关系
 
-Rust 实现（`code-agent-sdk`）以本文档为参考，目标功能对等。详见 `docs/arch-rust.md` 与 `docs/python-rust-feature-comparison.md`。
+Rust 实现（`code-agent-sdk`）以本文档为参考，目标功能对等。详见 `docs/arch-rust.md`。

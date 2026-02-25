@@ -1,7 +1,7 @@
 //! Integration tests - corresponds to Python test_integration.py
 //! These tests use mocked transport. E2E tests with real API are in e2e-tests/.
 
-use code_agent_sdk::{parse_message, types::*, ClaudeAgentOptions};
+use code_agent_sdk::{AgentOptions, parse_message, types::*};
 use serde_json::json;
 
 #[test]
@@ -51,7 +51,7 @@ fn test_simple_query_response_types() {
 
 #[test]
 fn test_options_continuation() {
-    let options = ClaudeAgentOptions::builder()
+    let options = AgentOptions::builder()
         .continue_conversation(true)
         .resume("session-123")
         .build();
@@ -108,7 +108,7 @@ fn test_create_sdk_mcp_server() {
 
 #[test]
 fn test_not_connected_error_on_receive() {
-    let client = code_agent_sdk::ClaudeSdkClient::new(None, None);
+    let client = code_agent_sdk::AgentSdkClient::new(None, None);
 
     // receive_messages should yield NotConnected error
     let rt = tokio::runtime::Runtime::new().unwrap();
@@ -128,7 +128,7 @@ fn test_not_connected_error_on_receive() {
 
 #[test]
 fn test_not_connected_error_on_server_info() {
-    let client = code_agent_sdk::ClaudeSdkClient::new(None, None);
+    let client = code_agent_sdk::AgentSdkClient::new(None, None);
 
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {

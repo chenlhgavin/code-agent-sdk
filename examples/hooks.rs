@@ -4,7 +4,7 @@
 //!
 //! NOTE: Hooks are not yet implemented. This example demonstrates the intended API.
 
-use code_agent_sdk::ClaudeAgentOptions;
+use code_agent_sdk::AgentOptions;
 use std::env;
 
 #[tokio::main]
@@ -23,17 +23,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== PreToolUse Example ===");
     println!("NOTE: Hooks are not yet implemented.");
     println!("When implemented, the usage would be:\n");
-    println!("  let options = ClaudeAgentOptions::builder()");
+    println!("  let options = AgentOptions::builder()");
     println!("      .allowed_tools([\"Bash\"])");
     println!("      .hooks({{");
-    println!("          \"PreToolUse\": [HookMatcher {{ matcher: \"Bash\", hooks: [check_bash_command] }}]");
+    println!(
+        "          \"PreToolUse\": [HookMatcher {{ matcher: \"Bash\", hooks: [check_bash_command] }}]"
+    );
     println!("      }})");
     println!("      .build();");
     println!();
 
-    let _options = ClaudeAgentOptions::builder()
-        .allowed_tools(["Bash"])
-        .build();
+    let _options = AgentOptions::builder().allowed_tools(["Bash"]).build();
 
     Ok(())
 }

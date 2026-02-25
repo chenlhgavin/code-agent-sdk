@@ -2,12 +2,12 @@
 //!
 //! Run with: cargo run --example system_prompt
 
-use code_agent_sdk::{query, ClaudeAgentOptions};
+use code_agent_sdk::{AgentOptions, query};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== String System Prompt ===");
-    let options = ClaudeAgentOptions::builder()
+    let options = AgentOptions::builder()
         .system_prompt("You are a pirate assistant. Respond in pirate speak.")
         .build();
 

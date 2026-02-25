@@ -1,0 +1,12 @@
+[package]
+name = "code-agent-sdk-fixtures"
+version = "0.1.0"
+edition = "2024"
+description = "Integration fixtures for code-agent-sdk (mirrors fixtures/claude-agent-sdk-python)"
+
+[dependencies]
+code-agent-sdk = { path = "../.." }
+tokio = { version = "1", features = ["full"] }
+futures = "0.3"
+anyhow = "1"
+serde_json = "1"

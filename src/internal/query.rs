@@ -12,8 +12,8 @@ use async_stream::stream;
 use futures::Stream;
 use std::collections::HashMap;
 use std::pin::Pin;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tokio::sync::{broadcast, mpsc};
 
 const INITIALIZE_TIMEOUT_SECS: u64 = 60;
@@ -37,7 +37,7 @@ pub struct Query {
 impl Query {
     pub fn new(
         mut transport: Box<dyn Transport + Send>,
-        options: &crate::options::ClaudeAgentOptions,
+        options: &crate::options::AgentOptions,
     ) -> Self {
         let (message_tx, _) = broadcast::channel(MESSAGE_BUFFER_SIZE);
         let (write_tx, mut write_rx) = mpsc::channel::<String>(64);
@@ -121,7 +121,7 @@ impl Query {
         }
     }
 
-    pub async fn initialize(&mut self, options: &crate::options::ClaudeAgentOptions) -> Result<()> {
+    pub async fn initialize(&mut self, options: &crate::options::AgentOptions) -> Result<()> {
         let request_id = self.next_request_id();
         let agents_json = options.agents.as_ref().and_then(|a| {
             let m: serde_json::Map<_, _> = a
@@ -348,10 +348,10 @@ impl Query {
             use futures::StreamExt;
             let mut stream = input_stream;
             while let Some(msg) = stream.next().await {
-                if let Ok(json_str) = serde_json::to_string(&msg) {
-                    if write_tx.send(json_str).await.is_err() {
-                        break;
-                    }
+                if let Ok(json_str) = serde_json::to_string(&msg)
+                    && write_tx.send(json_str).await.is_err()
+                {
+                    break;
                 }
             }
             // Close the write channel when stream ends (triggers stdin close)
@@ -434,11 +434,7 @@ fn build_hook_callbacks(
             }
         }
     }
-    if map.is_empty() {
-        None
-    } else {
-        Some(map)
-    }
+    if map.is_empty() { None } else { Some(map) }
 }
 
 fn format_control_error(request_id: &str, error: &str) -> String {
@@ -627,7 +623,7 @@ async fn handle_control_request(
 
 /// Extract SDK MCP server configs from options for in-process routing.
 fn extract_sdk_mcp_servers(
-    options: &crate::options::ClaudeAgentOptions,
+    options: &crate::options::AgentOptions,
 ) -> Option<Arc<HashMap<String, McpSdkConfig>>> {
     let servers = match options.mcp_servers.as_ref()? {
         crate::options::McpServersConfig::Dict(dict) => dict,

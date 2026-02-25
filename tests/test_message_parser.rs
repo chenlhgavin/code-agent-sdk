@@ -1,6 +1,6 @@
 //! Tests for message parser - corresponds to Python test_message_parser.py
 
-use code_agent_sdk::{parse_message, ContentBlock, Error, Message, UserContent};
+use code_agent_sdk::{ContentBlock, Error, Message, UserContent, parse_message};
 use serde_json::json;
 
 #[test]

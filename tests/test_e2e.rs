@@ -5,11 +5,11 @@
 #![allow(clippy::needless_return)] // Early return when API key missing for pre-commit --include-ignored
 
 // NOTE: These tests are placeholders. They will compile but are ignored by default.
-// When the full SDK (query, ClaudeSdkClient, Transport, MCP) is implemented,
+// When the full SDK is implemented,
 // run with: cargo test --test test_e2e -- --ignored
 
 #[allow(unused_imports)]
-use code_agent_sdk::ClaudeAgentOptions;
+use code_agent_sdk::AgentOptions;
 
 fn require_api_key() -> bool {
     std::env::var("ANTHROPIC_API_KEY").is_ok()
@@ -24,11 +24,11 @@ fn test_sdk_mcp_tool_execution() {
     }
     // TODO: When SDK is implemented:
     // let server = create_sdk_mcp_server("test", "1.0.0", vec![echo_tool]);
-    // let options = ClaudeAgentOptions::builder()
+    // let options = AgentOptions::builder()
     //     .mcp_servers(...)
     //     .allowed_tools(vec!["mcp__test__echo"])
     //     .build();
-    // async with ClaudeSdkClient(options) as client:
+    // async with AgentSdkClient(options) as client:
     //     client.query("Call the mcp__test__echo tool with any text")
     //     for msg in client.receive_response() { ... }
     // assert executions.contains("echo")

@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo run --example streaming_mode [basic_streaming|multi_turn|all]
 
-use code_agent_sdk::{ClaudeSdkClient, Message};
+use code_agent_sdk::{AgentSdkClient, Message};
 use std::env;
 
 #[allow(dead_code)]
@@ -35,7 +35,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     println!("=== Basic Streaming Example ===");
-    let mut client = ClaudeSdkClient::new(None, None);
+    let mut client = AgentSdkClient::new(None, None);
     if let Err(e) = client.connect(None).await {
         println!("Note: connect() failed: {}", e);
         return Ok(());

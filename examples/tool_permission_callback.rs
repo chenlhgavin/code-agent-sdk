@@ -4,7 +4,7 @@
 //!
 //! NOTE: can_use_tool callback is not yet implemented.
 
-use code_agent_sdk::ClaudeAgentOptions;
+use code_agent_sdk::AgentOptions;
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -19,14 +19,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("============================================================");
     println!("\nNOTE: can_use_tool callback is not yet implemented.");
     println!("When implemented, the usage would be:\n");
-    println!("  let options = ClaudeAgentOptions::builder()");
+    println!("  let options = AgentOptions::builder()");
     println!("      .can_use_tool(my_permission_callback)");
     println!("      .permission_mode(\"default\")");
     println!("      .cwd(\".\")");
     println!("      .build();");
     println!();
 
-    let _options = ClaudeAgentOptions::builder()
+    let _options = AgentOptions::builder()
         .permission_mode("default")
         .cwd(".")
         .build();

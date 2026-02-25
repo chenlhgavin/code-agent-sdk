@@ -1,7 +1,7 @@
 //! Tests for type definitions - corresponds to Python test_types.py
 
 use code_agent_sdk::types::*;
-use code_agent_sdk::{ClaudeAgentOptions, ClaudeAgentOptionsBuilder};
+use code_agent_sdk::{AgentOptions, AgentOptionsBuilder};
 
 #[test]
 fn test_user_message_creation() {
@@ -83,7 +83,7 @@ fn test_result_message() {
 
 #[test]
 fn test_default_options() {
-    let options = ClaudeAgentOptions::default();
+    let options = AgentOptions::default();
     assert!(options.allowed_tools.is_empty());
     assert!(options.system_prompt.is_none());
     assert!(options.permission_mode.is_none());
@@ -93,7 +93,7 @@ fn test_default_options() {
 
 #[test]
 fn test_options_with_tools() {
-    let options = ClaudeAgentOptionsBuilder::new()
+    let options = AgentOptionsBuilder::new()
         .allowed_tools(["Read", "Write", "Edit"])
         .disallowed_tools(["Bash"])
         .build();
@@ -104,7 +104,7 @@ fn test_options_with_tools() {
 #[test]
 fn test_options_with_permission_mode() {
     use code_agent_sdk::PermissionMode;
-    let options = ClaudeAgentOptionsBuilder::new()
+    let options = AgentOptionsBuilder::new()
         .permission_mode("bypassPermissions")
         .build();
     assert_eq!(
@@ -115,7 +115,7 @@ fn test_options_with_permission_mode() {
 
 #[test]
 fn test_options_with_system_prompt() {
-    let options = ClaudeAgentOptionsBuilder::new()
+    let options = AgentOptionsBuilder::new()
         .system_prompt("You are a helpful assistant.")
         .build();
     assert!(options.system_prompt.is_some());

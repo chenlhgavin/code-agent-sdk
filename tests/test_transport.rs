@@ -3,16 +3,16 @@
 //! NOTE: SubprocessCliTransport and _build_command are not yet implemented.
 //! These tests verify options structure for transport configuration.
 
-use code_agent_sdk::ClaudeAgentOptions;
+use code_agent_sdk::AgentOptions;
 use std::path::Path;
 
-fn make_options(cli_path: &str) -> ClaudeAgentOptions {
-    ClaudeAgentOptions::builder().cli_path(cli_path).build()
+fn make_options(cli_path: &str) -> AgentOptions {
+    AgentOptions::builder().cli_path(cli_path).build()
 }
 
 #[test]
 fn test_options_with_cwd() {
-    let options = ClaudeAgentOptions::builder()
+    let options = AgentOptions::builder()
         .cli_path("/usr/bin/claude")
         .cwd("/custom/path")
         .build();
@@ -26,7 +26,7 @@ fn test_options_with_cwd() {
 #[test]
 fn test_cli_path_accepts_pathbuf() {
     let path = std::path::PathBuf::from("/usr/bin/claude");
-    let options = ClaudeAgentOptions::builder().cli_path(path.clone()).build();
+    let options = AgentOptions::builder().cli_path(path.clone()).build();
     assert_eq!(options.cli_path.as_ref(), Some(&path));
 }
 
@@ -44,7 +44,7 @@ fn test_build_command_options_structure() {
 
 #[test]
 fn test_options_with_all_transport_params() {
-    let options = ClaudeAgentOptions::builder()
+    let options = AgentOptions::builder()
         .cli_path("/usr/bin/claude")
         .cwd("/project")
         .system_prompt("Be helpful")

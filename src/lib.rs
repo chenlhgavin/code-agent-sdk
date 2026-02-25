@@ -1,7 +1,9 @@
-//! Code Agent SDK for Rust - Claude Code Agent SDK
+//! Code Agent SDK for Rust
 //!
+//! Multi-backend SDK supporting Claude Code, Codex, and Cursor Agent CLIs.
 //! See [arch-rust.md](../docs/arch-rust.md) for architecture design.
 
+pub mod backend;
 pub mod client;
 pub mod error;
 pub mod internal;
@@ -9,12 +11,14 @@ pub mod options;
 pub mod transport;
 pub mod types;
 
-pub use client::ClaudeSdkClient;
+// Primary exports
+pub use backend::BackendKind;
+pub use client::AgentSdkClient;
 pub use error::{Error, Result};
 pub use internal::message_parser::parse_message;
 pub use options::{
-    AgentDefinition, AgentModel, AssistantMessageError, ClaudeAgentOptions,
-    ClaudeAgentOptionsBuilder, Effort, HookEvent, HookMatcher, McpHttpConfig, McpSdkConfig,
+    AgentDefinition, AgentModel, AgentOptions, AgentOptionsBuilder, AssistantMessageError,
+    CodexOptions, CursorOptions, Effort, HookEvent, HookMatcher, McpHttpConfig, McpSdkConfig,
     McpServerConfig, McpServersConfig, McpSseConfig, McpStdioConfig, PermissionMode,
     PermissionResult, PermissionResultAllow, PermissionResultDeny, SandboxSettings, SdkBeta,
     SdkMcpTool, SdkMcpToolHandler, SdkPluginConfig, SettingSource, ToolPermissionContext,
@@ -79,12 +83,13 @@ where
     }
 }
 
-/// One-shot query for Claude Code.
+/// One-shot query supporting all backends.
 ///
 /// Accepts a string prompt or a [`Prompt`] enum for stream-based input.
+/// The backend is selected via [`AgentOptions::backend`].
 pub fn query(
     prompt: impl Into<Prompt> + Send + 'static,
-    options: Option<ClaudeAgentOptions>,
+    options: Option<AgentOptions>,
 ) -> impl futures::Stream<Item = Result<Message>> + Send {
     let options = options.unwrap_or_default();
     internal::client::InternalClient::new().process_query(prompt.into(), options)

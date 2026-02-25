@@ -2,7 +2,7 @@
 //!
 //! Run with: cargo run --example quick_start
 
-use code_agent_sdk::{query, ClaudeAgentOptions, Message};
+use code_agent_sdk::{AgentOptions, Message, query};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -24,7 +24,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     println!("=== With Options Example ===");
-    let options = ClaudeAgentOptions::builder()
+    let options = AgentOptions::builder()
         .system_prompt("You are a helpful assistant that explains things simply.")
         .max_turns(1)
         .build();
@@ -45,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!();
 
     println!("=== With Tools Example ===");
-    let options = ClaudeAgentOptions::builder()
+    let options = AgentOptions::builder()
         .allowed_tools(["Read", "Write"])
         .system_prompt("You are a helpful file assistant.")
         .build();

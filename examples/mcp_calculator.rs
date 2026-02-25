@@ -5,8 +5,8 @@
 //! This example demonstrates creating SDK MCP tools and routing them in-process.
 
 use code_agent_sdk::{
-    create_sdk_mcp_server, sdk_mcp_tool, ClaudeAgentOptions, ClaudeSdkClient, McpServerConfig,
-    McpServersConfig,
+    AgentOptions, AgentSdkClient, McpServerConfig, McpServersConfig, create_sdk_mcp_server,
+    sdk_mcp_tool,
 };
 use serde_json::json;
 use std::collections::HashMap;
@@ -88,7 +88,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut servers = HashMap::new();
     servers.insert("calc".to_string(), McpServerConfig::Sdk(calculator));
 
-    let options = ClaudeAgentOptions::builder()
+    let options = AgentOptions::builder()
         .mcp_servers(McpServersConfig::Dict(servers))
         .allowed_tools([
             "mcp__calc__add",
@@ -97,7 +97,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         ])
         .build();
 
-    let mut client = ClaudeSdkClient::new(Some(options), None);
+    let mut client = AgentSdkClient::new(Some(options), None);
     if let Err(e) = client.connect(None).await {
         println!("Note: connect() failed: {}", e);
         return Ok(());

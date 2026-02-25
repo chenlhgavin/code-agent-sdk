@@ -2,14 +2,14 @@
 //!
 //! Run with: cargo run --example tools_option
 
-use code_agent_sdk::{query, ClaudeAgentOptions, Message};
+use code_agent_sdk::{AgentOptions, Message, query};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== Tools Array Example ===");
     println!("Setting tools=['Read', 'Glob', 'Grep']\n");
 
-    let options = ClaudeAgentOptions::builder()
+    let options = AgentOptions::builder()
         .allowed_tools(["Read", "Glob", "Grep"])
         .max_turns(1)
         .build();

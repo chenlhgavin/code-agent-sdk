@@ -28,6 +28,15 @@ pub enum Error {
     #[error("Control request timeout: {0}")]
     ControlTimeout(String),
 
+    #[error("Feature '{feature}' is not supported by the {backend} backend")]
+    UnsupportedFeature { feature: String, backend: String },
+
+    #[error("Options not supported by {backend} backend: {}", options.join(", "))]
+    UnsupportedOptions {
+        backend: String,
+        options: Vec<String>,
+    },
+
     #[error("{0}")]
     Other(String),
 }
