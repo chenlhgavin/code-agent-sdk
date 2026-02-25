@@ -21,12 +21,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             Some(options),
         );
         while let Some(msg_result) = stream.next().await {
-            if let Ok(Message::System(ref s)) = msg_result {
-                if s.subtype == "init" {
-                    if let Some(tools) = s.data.get("tools") {
-                        println!("Tools from system message: {}", tools);
-                    }
-                }
+            if let Ok(Message::System(ref s)) = msg_result
+                && s.subtype == "init"
+                && let Some(tools) = s.data.get("tools")
+            {
+                println!("Tools from system message: {}", tools);
             }
             if let Ok(Message::Assistant(ref a)) = msg_result {
                 for block in &a.content {
@@ -35,10 +34,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            if let Ok(Message::Result(ref r)) = msg_result {
-                if let Some(cost) = r.total_cost_usd {
-                    println!("\nCost: ${:.4}", cost);
-                }
+            if let Ok(Message::Result(ref r)) = msg_result
+                && let Some(cost) = r.total_cost_usd
+            {
+                println!("\nCost: ${:.4}", cost);
             }
         }
     }

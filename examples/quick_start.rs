@@ -64,10 +64,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                 }
             }
-            if let Ok(Message::Result(ref r)) = msg_result {
-                if let Some(cost) = r.total_cost_usd {
-                    println!("\nCost: ${:.4}", cost);
-                }
+            if let Ok(Message::Result(ref r)) = msg_result
+                && let Some(cost) = r.total_cost_usd
+            {
+                println!("\nCost: ${:.4}", cost);
             }
         }
     }

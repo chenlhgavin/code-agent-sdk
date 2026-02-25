@@ -147,6 +147,8 @@ impl Query {
             }
         });
 
+        // Subscribe before sending to avoid missing fast responses.
+        let mut rx = self.message_tx.subscribe();
         self.write_tx
             .as_ref()
             .ok_or_else(|| Error::Other("Query closed".to_string()))?
@@ -154,34 +156,40 @@ impl Query {
             .await
             .map_err(|_| Error::Other("Write channel closed".to_string()))?;
 
-        let mut rx = self.message_tx.subscribe();
         let timeout = tokio::time::Duration::from_secs(INITIALIZE_TIMEOUT_SECS);
 
-        loop {
-            tokio::select! {
-                msg = rx.recv() => {
-                    match msg {
-                        Ok(ControlMessage::Data(data)) => {
-                            let resp = data.get("response").and_then(|v| v.as_object());
-                            let req_id = resp.and_then(|r| r.get("request_id")).and_then(|v| v.as_str());
-                            if req_id == Some(&request_id) {
-                                let result = data.get("response").and_then(|r| r.get("response")).cloned();
-                                *self.init_result.write().await = result;
-                                return Ok(());
-                            }
-                            continue;
+        tokio::time::timeout(timeout, async {
+            loop {
+                match rx.recv().await {
+                    Ok(ControlMessage::Data(data)) => {
+                        let resp = data.get("response").and_then(|v| v.as_object());
+                        let req_id = resp
+                            .and_then(|r| r.get("request_id"))
+                            .and_then(|v| v.as_str());
+                        if req_id == Some(&request_id) {
+                            let result = data
+                                .get("response")
+                                .and_then(|r| r.get("response"))
+                                .cloned();
+                            *self.init_result.write().await = result;
+                            return Ok(());
                         }
-                        Ok(ControlMessage::End | ControlMessage::Error(_)) => {
-                            return Err(Error::Other("Stream ended before initialize response".to_string()));
-                        }
-                        Err(_) => return Err(Error::Other("Channel closed".to_string())),
+                        continue;
                     }
-                }
-                _ = tokio::time::sleep(timeout) => {
-                    return Err(Error::Other("Initialize timeout".to_string()));
+                    Ok(ControlMessage::End) => {
+                        return Err(Error::Other(
+                            "Stream ended before initialize response".to_string(),
+                        ));
+                    }
+                    Ok(ControlMessage::Error(e)) => {
+                        return Err(Error::Other(e));
+                    }
+                    Err(_) => return Err(Error::Other("Channel closed".to_string())),
                 }
             }
-        }
+        })
+        .await
+        .map_err(|_| Error::ControlTimeout("initialize".to_string()))?
     }
 
     fn next_request_id(&self) -> String {
@@ -201,6 +209,8 @@ impl Query {
             "request": request
         });
 
+        // Subscribe before sending to avoid missing fast responses.
+        let mut rx = self.message_tx.subscribe();
         self.write_tx
             .as_ref()
             .ok_or_else(|| Error::Other("Query closed".to_string()))?
@@ -208,40 +218,46 @@ impl Query {
             .await
             .map_err(|_| Error::Other("Write channel closed".to_string()))?;
 
-        let mut rx = self.message_tx.subscribe();
         let timeout = tokio::time::Duration::from_secs(60);
 
-        loop {
-            tokio::select! {
-                msg = rx.recv() => {
-                    match msg {
-                        Ok(ControlMessage::Data(data)) => {
-                            let resp = data.get("response").and_then(|v| v.as_object());
-                            let req_id = resp.and_then(|r| r.get("request_id")).and_then(|v| v.as_str());
-                            if req_id == Some(&request_id) {
-                                if resp.and_then(|r| r.get("subtype")).and_then(|v| v.as_str()) == Some("error") {
-                                    let err = resp.and_then(|r| r.get("error")).and_then(|v| v.as_str()).unwrap_or("Unknown");
-                                    return Err(Error::Other(err.to_string()));
-                                }
-                                let result = resp.and_then(|r| r.get("response")).cloned().unwrap_or(serde_json::Value::Null);
-                                return Ok(result);
+        tokio::time::timeout(timeout, async {
+            loop {
+                match rx.recv().await {
+                    Ok(ControlMessage::Data(data)) => {
+                        let resp = data.get("response").and_then(|v| v.as_object());
+                        let req_id = resp
+                            .and_then(|r| r.get("request_id"))
+                            .and_then(|v| v.as_str());
+                        if req_id == Some(&request_id) {
+                            if resp.and_then(|r| r.get("subtype")).and_then(|v| v.as_str())
+                                == Some("error")
+                            {
+                                let err = resp
+                                    .and_then(|r| r.get("error"))
+                                    .and_then(|v| v.as_str())
+                                    .unwrap_or("Unknown");
+                                return Err(Error::Other(err.to_string()));
                             }
-                            continue;
+                            let result = resp
+                                .and_then(|r| r.get("response"))
+                                .cloned()
+                                .unwrap_or(serde_json::Value::Null);
+                            return Ok(result);
                         }
-                        Ok(ControlMessage::End) => {
-                            return Err(Error::Other("Stream ended".to_string()));
-                        }
-                        Ok(ControlMessage::Error(e)) => {
-                            return Err(Error::Other(e));
-                        }
-                        Err(_) => return Err(Error::Other("Channel closed".to_string())),
+                        continue;
                     }
-                }
-                _ = tokio::time::sleep(timeout) => {
-                    return Err(Error::Other("Control request timeout".to_string()));
+                    Ok(ControlMessage::End) => {
+                        return Err(Error::Other("Stream ended".to_string()));
+                    }
+                    Ok(ControlMessage::Error(e)) => {
+                        return Err(Error::Other(e));
+                    }
+                    Err(_) => return Err(Error::Other("Channel closed".to_string())),
                 }
             }
-        }
+        })
+        .await
+        .map_err(|_| Error::ControlTimeout(request_id))?
     }
 
     pub fn receive_messages(&self) -> Pin<Box<dyn Stream<Item = Result<Message>> + Send + '_>> {

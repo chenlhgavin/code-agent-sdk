@@ -25,6 +25,7 @@ use std::process::Stdio;
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::{broadcast, mpsc};
+use tokio::task::JoinHandle;
 
 use super::exec_transport::find_codex_cli;
 use super::jsonrpc;
@@ -32,6 +33,7 @@ use super::message_parser;
 
 const MESSAGE_BUFFER_SIZE: usize = 100;
 const INITIALIZE_TIMEOUT_SECS: u64 = 60;
+const CLOSE_TIMEOUT_SECS: u64 = 5;
 
 /// Internal message type for the app-server protocol.
 #[derive(Debug, Clone)]
@@ -53,7 +55,8 @@ pub struct CodexSession {
     id_gen: jsonrpc::RequestIdGenerator,
     thread_id: Option<String>,
     can_use_tool: Option<crate::options::CanUseToolCallback>,
-    #[allow(dead_code)]
+    write_task: Option<JoinHandle<()>>,
+    read_task: Option<JoinHandle<()>>,
     process: Option<Child>,
 }
 
@@ -116,7 +119,7 @@ impl CodexSession {
 
         // Write task
         let mut stdin_writer = stdin;
-        tokio::spawn(async move {
+        let write_task = tokio::spawn(async move {
             while let Some(msg) = write_rx.recv().await {
                 if stdin_writer
                     .write_all(format!("{}\n", msg).as_bytes())
@@ -134,7 +137,7 @@ impl CodexSession {
         let can_use_tool_for_read = options.can_use_tool.clone();
         let write_tx_for_read = write_tx.clone();
 
-        tokio::spawn(async move {
+        let read_task = tokio::spawn(async move {
             let reader = BufReader::new(stdout);
             let mut lines = reader.lines();
 
@@ -214,13 +217,14 @@ impl CodexSession {
             }),
         );
 
+        // Subscribe before sending to avoid missing fast responses.
+        let mut rx = message_tx.subscribe();
         write_tx
             .send(serde_json::to_string(&init_request)?)
             .await
             .map_err(|_| Error::Other("Write channel closed".to_string()))?;
 
         // Wait for initialize response
-        let mut rx = message_tx.subscribe();
         let init_result = tokio::time::timeout(
             std::time::Duration::from_secs(INITIALIZE_TIMEOUT_SECS),
             async {
@@ -262,6 +266,8 @@ impl CodexSession {
             id_gen,
             thread_id: None,
             can_use_tool: options.can_use_tool.clone(),
+            write_task: Some(write_task),
+            read_task: Some(read_task),
             process: Some(process),
         };
 
@@ -269,12 +275,14 @@ impl CodexSession {
         let thread_start_id = session.id_gen.next_id();
         let thread_start_req =
             jsonrpc::build_request(thread_start_id, "thread/start", serde_json::json!({}));
+
+        // Subscribe before sending to avoid missing fast responses.
+        let mut rx = session.message_tx.subscribe();
         session
             .send_raw(&serde_json::to_string(&thread_start_req)?)
             .await?;
 
         // Wait for thread/start response to get threadId
-        let mut rx = session.message_tx.subscribe();
         let thread_resp = tokio::time::timeout(
             std::time::Duration::from_secs(INITIALIZE_TIMEOUT_SECS),
             async {
@@ -310,18 +318,18 @@ impl CodexSession {
 
         session.thread_id = Some(thread_id.clone());
 
-        // If initial prompt provided, start a turn
+        // Keep connect semantics consistent across backends:
+        // Prompt::Text is accepted but not auto-sent.
         if let Some(prompt) = prompt {
-            let prompt_text = match prompt {
-                Prompt::Text(s) => s,
+            match prompt {
+                Prompt::Text(_) => {}
                 Prompt::Stream(_) => {
                     return Err(Error::Other(
                         "Codex session does not support stream prompts for initial message"
                             .to_string(),
                     ));
                 }
-            };
-            session.start_turn(&prompt_text).await?;
+            }
         }
 
         Ok(session)
@@ -532,6 +540,53 @@ impl Session for CodexSession {
 
     async fn close(&mut self) -> Result<()> {
         drop(self.write_tx.take());
+
+        if let Some(mut process) = self.process.take() {
+            let wait_result = tokio::time::timeout(
+                std::time::Duration::from_secs(CLOSE_TIMEOUT_SECS),
+                process.wait(),
+            )
+            .await;
+
+            match wait_result {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => {
+                    return Err(Error::Other(format!(
+                        "Failed waiting for Codex app-server shutdown: {}",
+                        e
+                    )));
+                }
+                Err(_) => {
+                    let _ = process.kill().await;
+                    let _ = process.wait().await;
+                }
+            }
+        }
+
+        if let Some(mut handle) = self.read_task.take()
+            && tokio::time::timeout(
+                std::time::Duration::from_secs(CLOSE_TIMEOUT_SECS),
+                &mut handle,
+            )
+            .await
+            .is_err()
+        {
+            handle.abort();
+            let _ = handle.await;
+        }
+        if let Some(mut handle) = self.write_task.take()
+            && tokio::time::timeout(
+                std::time::Duration::from_secs(CLOSE_TIMEOUT_SECS),
+                &mut handle,
+            )
+            .await
+            .is_err()
+        {
+            handle.abort();
+            let _ = handle.await;
+        }
+
+        let _ = self.message_tx.send(AppServerMessage::End);
         Ok(())
     }
 }
