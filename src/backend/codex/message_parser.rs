@@ -22,15 +22,71 @@ use serde_json::Value;
 /// Parse a Codex `exec --json` output event into a [`Message`].
 ///
 /// Codex exec outputs JSONL events; each line is one event object.
+/// Handles both the newer flat format (`type: "message"`) and the
+/// item-based format (`type: "item.completed"`) that production
+/// Codex CLIs emit.
 pub fn parse_exec_event(data: &Value) -> Result<Option<Message>> {
     let event_type = data.get("type").and_then(|v| v.as_str()).unwrap_or("");
 
     match event_type {
+        // Newer flat format
         "message" => parse_exec_message(data),
         "function_call" => parse_exec_function_call(data),
         "function_call_output" => parse_exec_function_output(data),
+        // Item-based format emitted by production Codex exec --json
+        "item.completed" => parse_item_completed(data),
+        "turn.completed" => parse_turn_completed(data),
+        "thread.started" => parse_exec_thread_started(data),
+        "turn.started" => Ok(Some(Message::System(SystemMessage {
+            subtype: "turn_started".to_string(),
+            data: data.clone(),
+        }))),
+        "error" => {
+            let message = data
+                .get("message")
+                .and_then(|v| v.as_str())
+                .unwrap_or("Unknown error")
+                .to_string();
+            Ok(Some(Message::System(SystemMessage {
+                subtype: "error".to_string(),
+                data: serde_json::json!({"type": "system", "subtype": "error", "message": message}),
+            })))
+        }
+        "turn.failed" => {
+            let message = data
+                .get("error")
+                .and_then(|e| e.get("message"))
+                .and_then(|m| m.as_str())
+                .unwrap_or("Turn failed")
+                .to_string();
+            Ok(Some(Message::System(SystemMessage {
+                subtype: "error".to_string(),
+                data: serde_json::json!({"type": "system", "subtype": "error", "message": message}),
+            })))
+        }
         _ => Ok(None),
     }
+}
+
+/// Parses a `thread.started` event from exec JSONL output.
+///
+/// Exec mode uses `thread_id` (snake_case) while app-server uses
+/// `threadId` (camelCase).
+fn parse_exec_thread_started(data: &Value) -> Result<Option<Message>> {
+    let thread_id = data
+        .get("threadId")
+        .or_else(|| data.get("thread_id"))
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .to_string();
+    let mut map = serde_json::Map::new();
+    map.insert("type".to_string(), Value::String("system".to_string()));
+    map.insert("subtype".to_string(), Value::String("init".to_string()));
+    map.insert("threadId".to_string(), Value::String(thread_id));
+    Ok(Some(Message::System(SystemMessage {
+        subtype: "init".to_string(),
+        data: Value::Object(map),
+    })))
 }
 
 fn parse_exec_message(data: &Value) -> Result<Option<Message>> {
@@ -532,6 +588,135 @@ mod tests {
     #[test]
     fn test_should_return_none_for_unknown_notification() {
         let msg = parse_app_server_notification("unknown/method", &json!({})).unwrap();
+        assert!(msg.is_none());
+    }
+
+    // ── parse_exec_event: item-based format tests ──────────────
+
+    #[test]
+    fn test_should_parse_exec_item_completed_agent_message() {
+        let data = json!({
+            "type": "item.completed",
+            "item": {
+                "id": "item_0",
+                "type": "agent_message",
+                "text": "```yaml\nissues: []\n```"
+            }
+        });
+        let msg = parse_exec_event(&data).unwrap();
+        let msg = msg.expect("should parse");
+        match msg {
+            Message::Assistant(a) => {
+                assert_eq!(a.content.len(), 1);
+                match &a.content[0] {
+                    ContentBlock::Text(t) => assert!(t.text.contains("issues: []")),
+                    _ => panic!("expected TextBlock"),
+                }
+            }
+            _ => panic!("expected AssistantMessage"),
+        }
+    }
+
+    #[test]
+    fn test_should_parse_exec_item_completed_command_execution() {
+        let data = json!({
+            "type": "item.completed",
+            "item": {
+                "id": "cmd-1",
+                "type": "command_execution",
+                "command": "git diff main -- src/main.rs",
+                "output": "+new line",
+                "exitCode": 0
+            }
+        });
+        let msg = parse_exec_event(&data).unwrap();
+        let msg = msg.expect("should parse");
+        match msg {
+            Message::Assistant(a) => {
+                assert_eq!(a.content.len(), 2);
+                match &a.content[0] {
+                    ContentBlock::ToolUse(t) => {
+                        assert_eq!(t.name, "Bash");
+                        assert_eq!(t.input["command"], "git diff main -- src/main.rs");
+                    }
+                    _ => panic!("expected ToolUseBlock"),
+                }
+            }
+            _ => panic!("expected AssistantMessage"),
+        }
+    }
+
+    #[test]
+    fn test_should_parse_exec_turn_completed() {
+        let data = json!({
+            "type": "turn.completed",
+            "usage": {"input_tokens": 100, "output_tokens": 50}
+        });
+        let msg = parse_exec_event(&data).unwrap();
+        let msg = msg.expect("should parse");
+        match msg {
+            Message::Result(r) => {
+                assert!(r.usage.is_some());
+            }
+            _ => panic!("expected ResultMessage"),
+        }
+    }
+
+    #[test]
+    fn test_should_parse_exec_thread_started_snake_case() {
+        let data = json!({
+            "type": "thread.started",
+            "thread_id": "019c7fd5"
+        });
+        let msg = parse_exec_event(&data).unwrap();
+        let msg = msg.expect("should parse");
+        match msg {
+            Message::System(s) => {
+                assert_eq!(s.subtype, "init");
+                assert_eq!(s.data["threadId"], "019c7fd5");
+            }
+            _ => panic!("expected SystemMessage"),
+        }
+    }
+
+    #[test]
+    fn test_should_parse_exec_error_event() {
+        let data = json!({
+            "type": "error",
+            "message": "Model not supported"
+        });
+        let msg = parse_exec_event(&data).unwrap();
+        let msg = msg.expect("should parse");
+        match msg {
+            Message::System(s) => {
+                assert_eq!(s.subtype, "error");
+                assert_eq!(s.data["message"], "Model not supported");
+            }
+            _ => panic!("expected SystemMessage"),
+        }
+    }
+
+    #[test]
+    fn test_should_parse_exec_turn_failed_event() {
+        let data = json!({
+            "type": "turn.failed",
+            "error": {"message": "The model is not supported"}
+        });
+        let msg = parse_exec_event(&data).unwrap();
+        let msg = msg.expect("should parse");
+        match msg {
+            Message::System(s) => {
+                assert_eq!(s.subtype, "error");
+                assert_eq!(s.data["message"], "The model is not supported");
+            }
+            _ => panic!("expected SystemMessage"),
+        }
+    }
+
+    #[test]
+    fn test_should_return_none_for_unknown_exec_event() {
+        let data = json!({"type": "some.unknown.event"});
+        let msg = parse_exec_event(&data).unwrap();
         assert!(msg.is_none());
     }
 }
